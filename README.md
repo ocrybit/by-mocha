@@ -25,7 +25,7 @@ Auto-run tests in `test` directory with Mocha.
 	.....
       "plugins" : ["by-coffeescript", "by-write2js", "by-mocha"],
       "by" : {
-        "mocha : {
+        "mocha" : {
           "testPaths" : ["test/*.coffee"]
         }
       },
