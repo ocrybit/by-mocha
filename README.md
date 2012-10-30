@@ -38,7 +38,7 @@ Broadcasted Events for further hacks
 ------------------------
 
 > `mocha` : successfully ran tests with mocha.  
-> `set dependency` : set test dependencies for a new file.
+> `set dependency` : set test dependencies for a new file.  
 > `remove dependency` : removed test dependencies for a deleted file.
 
 See the [annotated source](docs/by-mocha.html) for details.
