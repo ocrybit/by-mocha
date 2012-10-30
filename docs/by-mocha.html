@@ -1,0 +1,160 @@
+<!DOCTYPE html>  <html> <head>   <title>by-mocha.coffee</title>   <meta http-equiv="content-type" content="text/html; charset=UTF-8">   <link rel="stylesheet" media="all" href="docco.css" /> </head> <body>   <div id="container">     <div id="background"></div>            <div id="jump_to">         Jump To &hellip;         <div id="jump_wrapper">           <div id="jump_page">                                           <a class="source" href="by-mocha.html">                 by-mocha.coffee               </a>                                           <a class="source" href="mocha.html">                 mocha.coffee               </a>                        </div>         </div>       </div>          <table cellpadding="0" cellspacing="0">       <thead>         <tr>           <th class="docs">             <h1>               by-mocha.coffee             </h1>           </th>           <th class="code">           </th>         </tr>       </thead>       <tbody>                               <tr id="section-1">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-1">&#182;</a>               </div>                            </td>             <td class="code">               <div class="highlight"><pre><span class="nv">fs = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;fs&#39;</span><span class="p">)</span>
+<span class="nv">path = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;path&#39;</span><span class="p">)</span>
+<span class="nv">minimatch = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;minimatch&#39;</span><span class="p">)</span>
+<span class="nv">util = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;util&#39;</span><span class="p">)</span>
+<span class="nv">cp = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;child_process&#39;</span><span class="p">)</span>
+<span class="nv">_ = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;underscore&#39;</span><span class="p">)</span>
+<span class="nv">coffee = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;coffee-script&#39;</span><span class="p">)</span>
+<span class="nv">EventEmitter = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;events&#39;</span><span class="p">).</span><span class="nx">EventEmitter</span>
+
+<span class="nv">module.exports = </span><span class="k">class</span> <span class="nx">ByMocha</span> <span class="k">extends</span> <span class="nx">EventEmitter</span>
+
+  <span class="nv">constructor: </span><span class="nf">(@opts = {}) -&gt;</span>
+    <span class="vi">@dependencyMap = </span><span class="p">{}</span>
+    <span class="vi">@testPaths = </span><span class="p">[]</span>
+    <span class="k">if</span> <span class="nx">@opts</span><span class="p">.</span><span class="nx">testPaths</span><span class="o">?</span>
+      <span class="vi">@testPaths = </span><span class="p">(</span><span class="nx">path</span><span class="p">.</span><span class="nx">resolve</span><span class="p">(</span><span class="nx">v</span><span class="p">)</span> <span class="k">for</span> <span class="nx">v</span> <span class="k">in</span> <span class="nx">@opts</span><span class="p">.</span><span class="nx">testPaths</span><span class="p">)</span>
+    <span class="vi">@mochaStack = </span><span class="p">[]</span>
+    <span class="vi">@mocharunning = </span><span class="kc">false</span>
+
+  <span class="nv">_setListeners: </span><span class="nf">(@bystander) -&gt;</span>
+    <span class="nx">@bystander</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;File changed&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span>
+      <span class="k">if</span> <span class="nx">data</span><span class="p">.</span><span class="nx">file</span><span class="o">?</span>
+        <span class="nv">filename = </span><span class="nx">data</span><span class="p">.</span><span class="nx">file</span>
+      <span class="k">else</span> <span class="k">if</span> <span class="k">typeof</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;string&#39;</span>
+        <span class="nv">filename = </span><span class="nx">data</span>
+      <span class="k">if</span> <span class="nx">@_isTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+        <span class="nx">@_getTestDependencies</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+        <span class="nx">@_registerTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+      <span class="k">else</span> <span class="k">if</span> <span class="nx">path</span><span class="p">.</span><span class="nx">extname</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;.js&#39;</span>
+        <span class="nx">@_checkTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">,</span><span class="nx">data</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="nx">@bystander</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;File created&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span>
+      <span class="k">if</span> <span class="nx">data</span><span class="p">.</span><span class="nx">file</span><span class="o">?</span>
+        <span class="nv">filename = </span><span class="nx">data</span><span class="p">.</span><span class="nx">file</span>
+      <span class="k">else</span> <span class="k">if</span> <span class="k">typeof</span><span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;string&#39;</span>
+        <span class="nv">filename = </span><span class="nx">data</span>
+      <span class="nx">@_checkTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">,</span><span class="nx">data</span><span class="p">)</span>
+      <span class="k">if</span> <span class="nx">@_isTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+        <span class="nx">@_getTestDependencies</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+        <span class="nx">@_registerTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+      <span class="k">else</span> <span class="k">if</span> <span class="nx">path</span><span class="p">.</span><span class="nx">extname</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;.js&#39;</span>
+        <span class="nx">@_checkTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">,</span><span class="nx">data</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="nx">@bystander</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;File found&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="nx">stat</span><span class="p">)</span> <span class="o">=&gt;</span>
+      <span class="k">if</span> <span class="nx">@_isTest</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+        <span class="nx">@_getTestDependencies</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+    <span class="p">)</span>
+
+  <span class="nv">_getTestDependencies: </span><span class="nf">(file,cb) -&gt;</span>
+    <span class="nx">fs</span><span class="p">.</span><span class="nx">readFile</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span><span class="s">&#39;utf8&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span> <span class="nx">body</span><span class="p">)</span> <span class="o">=&gt;</span>
+      <span class="nx">unless</span> <span class="nx">err</span>
+        <span class="k">try</span>
+          <span class="nv">set = </span><span class="kc">false</span>
+          <span class="nv">nodes = </span><span class="nx">coffee</span><span class="p">.</span><span class="nx">nodes</span><span class="p">(</span><span class="nx">@_removeComments</span><span class="p">(</span><span class="nx">body</span><span class="p">))</span>
+          <span class="nx">@_parseNode</span><span class="p">(</span><span class="nx">nodes</span><span class="p">,</span><span class="nx">file</span><span class="p">)</span>
+          <span class="k">if</span> <span class="o">not</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">file</span><span class="p">]</span><span class="o">?</span>
+            <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">file</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="nv">set = </span><span class="kc">true</span>
+          <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">file</span><span class="p">].</span><span class="nx">push</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+          <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">file</span><span class="p">]</span> <span class="o">=</span> <span class="nx">_</span><span class="p">(</span><span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">file</span><span class="p">]).</span><span class="nx">uniq</span><span class="p">()</span>
+          <span class="k">if</span> <span class="nx">set</span>
+            <span class="nx">@emit</span><span class="p">(</span><span class="s">&#39;set dependency&#39;</span><span class="p">,</span> <span class="nx">file</span><span class="p">,</span> <span class="nx">@dependencyMap</span><span class="p">)</span>
+        <span class="k">catch</span> <span class="nx">e</span>
+          <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">e</span><span class="p">)</span>
+      <span class="nx">cb</span><span class="o">?</span><span class="p">()</span>
+    <span class="p">)</span>
+
+  <span class="nv">_isTest: </span><span class="nf">(file) -&gt;</span>
+    <span class="k">if</span> <span class="nx">path</span><span class="p">.</span><span class="nx">extname</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;.coffee&#39;</span> <span class="o">and</span> <span class="nx">@testPaths</span><span class="o">?</span>
+      <span class="k">for</span> <span class="nx">v</span> <span class="k">in</span> <span class="nx">@testPaths</span>
+        <span class="k">if</span> <span class="nx">minimatch</span><span class="p">(</span><span class="nx">file</span><span class="p">,</span> <span class="nx">v</span><span class="p">,</span> <span class="p">{</span><span class="nv">dot : </span><span class="kc">true</span><span class="p">})</span>
+          <span class="k">return</span> <span class="kc">true</span>
+    <span class="k">return</span> <span class="kc">false</span>
+
+  <span class="nv">_parseNode: </span><span class="nf">(node,file) -&gt;</span>
+    <span class="k">if</span> <span class="nx">node</span><span class="p">.</span><span class="nx">value</span><span class="o">?</span><span class="p">.</span><span class="nx">variable</span><span class="o">?</span><span class="p">.</span><span class="nx">base</span><span class="o">?</span><span class="p">.</span><span class="nx">value</span> <span class="o">is</span> <span class="s">&#39;require&#39;</span> <span class="o">and</span> <span class="nx">node</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">args</span><span class="o">?</span>
+      <span class="nv">moduleName = </span><span class="nx">node</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">?</span><span class="p">.</span><span class="nx">base</span><span class="o">?</span><span class="p">.</span><span class="nx">value</span><span class="p">.</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/^\&#39;/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">).</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/\&#39;$/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">).</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/^\&quot;/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">).</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/\&quot;$/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">)</span>
+      <span class="k">if</span> <span class="nx">moduleName</span><span class="p">.</span><span class="nx">match</span><span class="p">(</span><span class="sr">/\.{1,2}/</span><span class="p">)</span> <span class="o">isnt</span> <span class="kc">null</span>
+        <span class="nv">mpath = </span><span class="nx">path</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="nx">path</span><span class="p">.</span><span class="nx">dirname</span><span class="p">(</span><span class="nx">file</span><span class="p">),</span><span class="nx">moduleName</span><span class="p">)</span>
+        <span class="k">if</span> <span class="o">not</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">mpath</span><span class="p">]</span><span class="o">?</span>
+          <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">mpath</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">mpath</span><span class="p">].</span><span class="nx">push</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+        <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">mpath</span><span class="p">]</span> <span class="o">=</span> <span class="nx">_</span><span class="p">(</span><span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">mpath</span><span class="p">]).</span><span class="nx">uniq</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nx">util</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">node</span><span class="p">)</span>
+      <span class="k">for</span> <span class="nx">v</span><span class="p">,</span> <span class="nx">i</span> <span class="k">in</span> <span class="nx">node</span>
+        <span class="nx">@_parseNode</span><span class="p">(</span><span class="nx">v</span><span class="p">,</span><span class="nx">file</span><span class="p">)</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="k">typeof</span><span class="p">(</span><span class="nx">node</span><span class="p">)</span> <span class="o">is</span> <span class="s">&#39;object&#39;</span>
+      <span class="k">for</span> <span class="nx">k</span><span class="p">,</span> <span class="nx">v</span> <span class="k">of</span> <span class="nx">node</span>
+        <span class="k">if</span> <span class="nx">v</span><span class="o">?</span>
+          <span class="nx">@_parseNode</span><span class="p">(</span><span class="nx">v</span><span class="p">,</span><span class="nx">file</span><span class="p">)</span>
+  
+  <span class="nv">_removeComments: </span><span class="nf">(body) -&gt;</span>
+    <span class="k">return</span> <span class="p">(</span><span class="nx">v</span> <span class="k">for</span> <span class="nx">v</span> <span class="k">in</span> <span class="nx">body</span><span class="p">.</span><span class="nx">split</span><span class="p">(</span><span class="s">&#39;\n&#39;</span><span class="p">)</span> <span class="k">when</span> <span class="nx">v</span><span class="p">.</span><span class="nx">match</span><span class="p">(</span><span class="sr">/^\s*\#/</span><span class="p">)</span> <span class="o">is</span> <span class="kc">null</span><span class="p">).</span><span class="nx">join</span><span class="p">(</span><span class="s">&#39;\n&#39;</span><span class="p">)</span>
+
+  <span class="nv">_registerTest: </span><span class="nf">(file) -&gt;</span>
+    <span class="vi">@mochaStack = </span><span class="p">(</span><span class="nx">v</span> <span class="k">for</span> <span class="nx">v</span> <span class="k">in</span> <span class="nx">@mochaStack</span> <span class="k">when</span> <span class="nx">v</span> <span class="o">isnt</span> <span class="nx">file</span><span class="p">)</span>
+    <span class="nx">@mochaStack</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">file</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nx">@mocharunning</span> <span class="o">is</span> <span class="kc">false</span>
+      <span class="nx">@_mocha</span><span class="p">()</span>
+
+  <span class="nv">_getTestPath: </span><span class="nf">(src) -&gt;</span>
+    <span class="k">if</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">src</span><span class="p">]</span><span class="o">?</span>
+      <span class="k">return</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">src</span><span class="p">]</span>
+    <span class="k">return</span> <span class="kc">false</span>
+  
+  <span class="nv">_removeTest: </span><span class="nf">(filename) -&gt;</span>
+    <span class="nv">removed = </span><span class="kc">false</span>
+    <span class="k">if</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">filename</span><span class="p">]</span>
+      <span class="k">delete</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">filename</span><span class="p">]</span>
+      <span class="nv">removed = </span><span class="kc">true</span>
+    <span class="k">for</span> <span class="nx">k</span><span class="p">,</span> <span class="nx">v</span> <span class="k">of</span> <span class="nx">@dependencyMap</span>
+      <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="nx">v2</span> <span class="k">for</span> <span class="nx">v2</span><span class="p">,</span> <span class="nx">i2</span> <span class="k">in</span> <span class="nx">v</span> <span class="k">when</span> <span class="nx">v2</span> <span class="o">isnt</span> <span class="nx">filename</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nx">removed</span>
+      <span class="nx">@emit</span><span class="p">(</span><span class="s">&#39;removed dependency&#39;</span><span class="p">,</span> <span class="nx">filename</span><span class="p">,</span> <span class="nx">@dependencyMap</span><span class="p">)</span>
+  <span class="nv">_checkTest: </span><span class="nf">(filename,data) -&gt;</span>
+    <span class="k">if</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">filename</span><span class="p">]</span><span class="o">?</span>
+      <span class="nx">@_registerTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">)</span>
+    <span class="k">else</span> <span class="k">if</span> <span class="nx">@dependencyMap</span><span class="p">[</span><span class="nx">filename</span><span class="p">.</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/\.js$/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">)]</span><span class="o">?</span>
+      <span class="nx">@_registerTest</span><span class="p">(</span><span class="nx">filename</span><span class="p">.</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/\.js$/</span><span class="p">,</span><span class="s">&#39;&#39;</span><span class="p">))</span>
+
+  <span class="nv">_mocha: </span><span class="nf">() -&gt;</span>
+    <span class="vi">@mocharunning = </span><span class="kc">true</span>
+    <span class="nv">src = </span><span class="nx">@mochaStack</span><span class="p">.</span><span class="nx">shift</span><span class="p">()</span>
+    <span class="nv">testfile = </span><span class="nx">@_getTestPath</span><span class="p">(</span><span class="nx">src</span><span class="p">)</span>
+    <span class="nx">unless</span> <span class="nx">testfile</span> <span class="o">is</span> <span class="kc">false</span> <span class="o">or</span> <span class="nx">testfile</span><span class="p">.</span><span class="nx">length</span> <span class="o">is</span> <span class="mi">0</span>
+      <span class="nv">files = </span><span class="nx">testfile</span>
+      <span class="nv">cp_mocha = </span><span class="nx">cp</span><span class="p">.</span><span class="nx">fork</span><span class="p">(</span><span class="nx">__dirname</span> <span class="o">+</span> <span class="s">&#39;/mocha&#39;</span><span class="p">,</span> <span class="p">{</span><span class="nx">silent</span><span class="o">:</span><span class="kc">true</span><span class="p">})</span>
+      <span class="nx">cp_mocha</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;message&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">data</span><span class="p">)</span> <span class="o">=&gt;</span>
+        <span class="k">if</span> <span class="nx">data</span><span class="p">.</span><span class="nx">err</span>
+          <span class="nx">unless</span> <span class="nx">@opts</span><span class="p">.</span><span class="nx">nolog</span>
+            <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s">&#39;Mocha: something went wrong!\n&#39;</span><span class="p">.</span><span class="nx">red</span><span class="p">)</span>
+        <span class="k">else</span>
+          <span class="nx">unless</span> <span class="nx">@opts</span><span class="p">.</span><span class="nx">nolog</span>
+            <span class="nv">message = </span><span class="p">[</span><span class="s">&quot;Mocha:&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="nx">data</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">passes</span><span class="p">.</span><span class="nx">length</span> <span class="o">isnt</span> <span class="mi">0</span>
+              <span class="nx">message</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s">&quot; </span><span class="si">#{</span><span class="nx">data</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">passes</span><span class="p">.</span><span class="nx">length</span><span class="si">}</span><span class="s"> tests passed!&quot;</span><span class="p">.</span><span class="nx">green</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nx">data</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">failures</span><span class="p">.</span><span class="nx">length</span> <span class="o">isnt</span> <span class="mi">0</span>
+              <span class="nx">message</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s">&quot; </span><span class="si">#{</span><span class="nx">data</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">failures</span><span class="p">.</span><span class="nx">length</span><span class="si">}</span><span class="s"> tests failed!&quot;</span><span class="p">.</span><span class="nx">red</span><span class="p">)</span>
+            <span class="nx">message</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="s">&quot; &lt;= tests for </span><span class="si">#{</span><span class="nx">src</span><span class="si">}</span><span class="s">&quot;</span><span class="p">.</span><span class="nx">grey</span> <span class="o">+</span> <span class="s">&#39;\n&#39;</span><span class="p">)</span>
+            <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">message</span><span class="p">.</span><span class="nx">join</span><span class="p">(</span><span class="s">&#39;&#39;</span><span class="p">))</span>
+            <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s">&#39;&#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="nx">v</span><span class="p">,</span> <span class="nx">i</span> <span class="k">in</span> <span class="nx">data</span><span class="p">.</span><span class="nx">result</span><span class="p">.</span><span class="nx">failures</span>
+              <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s">&quot;</span><span class="si">#{</span><span class="nx">i</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s">) </span><span class="si">#{</span><span class="nx">v</span><span class="p">.</span><span class="nx">fullTitle</span><span class="si">}</span><span class="s">&quot;</span><span class="p">)</span>
+              <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="nx">v</span><span class="p">.</span><span class="nx">err</span><span class="p">.</span><span class="nx">message</span><span class="p">.</span><span class="nx">red</span><span class="p">)</span>
+              <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s">&#39;&#39;</span><span class="p">)</span>
+        <span class="nx">@emit</span><span class="p">(</span><span class="s">&#39;mocha&#39;</span><span class="p">,</span> <span class="nx">data</span><span class="p">)</span>
+        <span class="vi">@mocharunning = </span><span class="kc">false</span>
+        <span class="k">if</span> <span class="nx">@mochaStack</span><span class="p">.</span><span class="nx">length</span> <span class="o">isnt</span> <span class="mi">0</span>
+          <span class="nx">@_mocha</span><span class="p">()</span>
+      <span class="p">)</span>
+      <span class="nx">cp_mocha</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;error&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">err</span><span class="p">)</span> <span class="o">=&gt;</span>
+        <span class="nx">console</span><span class="p">.</span><span class="nx">log</span><span class="p">(</span><span class="s">&#39;Mocha: something went wrong!\n&#39;</span><span class="p">.</span><span class="nx">red</span><span class="p">)</span>
+      <span class="p">)</span>
+      <span class="nx">cp_mocha</span><span class="p">.</span><span class="nx">send</span><span class="p">({</span><span class="nx">file</span><span class="o">:</span><span class="nx">src</span><span class="p">,</span> <span class="nv">mocha : </span><span class="p">{</span> <span class="nv">files : </span><span class="nx">files</span><span class="p">}})</span>
+    <span class="k">else</span>
+      <span class="vi">@mocharunning = </span><span class="kc">false</span>
+      <span class="k">if</span> <span class="nx">@mochaStack</span><span class="p">.</span><span class="nx">length</span> <span class="o">isnt</span> <span class="mi">0</span>
+        <span class="nx">@_mocha</span><span class="p">()</span>
+
+</pre></div>             </td>           </tr>                </tbody>     </table>   </div> </body> </html> 

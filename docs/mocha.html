@@ -1,0 +1,67 @@
+<!DOCTYPE html>  <html> <head>   <title>mocha.coffee</title>   <meta http-equiv="content-type" content="text/html; charset=UTF-8">   <link rel="stylesheet" media="all" href="docco.css" /> </head> <body>   <div id="container">     <div id="background"></div>            <div id="jump_to">         Jump To &hellip;         <div id="jump_wrapper">           <div id="jump_page">                                           <a class="source" href="by-mocha.html">                 by-mocha.coffee               </a>                                           <a class="source" href="mocha.html">                 mocha.coffee               </a>                        </div>         </div>       </div>          <table cellpadding="0" cellspacing="0">       <thead>         <tr>           <th class="docs">             <h1>               mocha.coffee             </h1>           </th>           <th class="code">           </th>         </tr>       </thead>       <tbody>                               <tr id="section-1">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-1">&#182;</a>               </div>               <ul>
+<li>Listen to messages from a parent and generate docco documents</li>
+<li>This script should be forked by the main process</li>
+</ul>             </td>             <td class="code">               <div class="highlight"><pre></pre></div>             </td>           </tr>                               <tr id="section-2">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-2">&#182;</a>               </div>               <h3>Require Dependencies</h3>             </td>             <td class="code">               <div class="highlight"><pre> </pre></div>             </td>           </tr>                               <tr id="section-3">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-3">&#182;</a>               </div>               <h4>Third Party Modules</h4>
+
+<p><code>mocha</code> by <a href="https://github.com/jashkenas/docco">jashkenas@Jeremy Ashkenas</a></p>             </td>             <td class="code">               <div class="highlight"><pre><span class="nv">mocha = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;mocha&#39;</span><span class="p">)</span>
+<span class="nx">require</span><span class="p">(</span><span class="s">&#39;coffee-script&#39;</span><span class="p">)</span>
+<span class="nv">_ = </span><span class="nx">require</span><span class="p">(</span><span class="s">&#39;underscore&#39;</span><span class="p">)</span>
+<span class="nx">process</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;message&#39;</span><span class="p">,(</span><span class="nx">data</span><span class="p">)</span><span class="o">=&gt;</span>
+  <span class="nv">file = </span><span class="nx">data</span><span class="p">.</span><span class="nx">file</span>
+  <span class="nv">tests = </span><span class="p">[]</span>
+  <span class="nv">failures = </span><span class="p">[]</span>
+  <span class="nv">passes = </span><span class="p">[]</span>
+  <span class="nv">suites = </span><span class="p">[]</span>
+  <span class="nv">snumber = </span><span class="o">-</span><span class="mi">1</span>
+  <span class="nv">obj = </span><span class="p">{}</span>
+  <span class="nv">clean = </span><span class="p">(</span><span class="nx">test</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="k">return</span> <span class="p">{</span>
+      <span class="nv">title: </span><span class="nx">test</span><span class="p">.</span><span class="nx">title</span>
+      <span class="nv">fullTitle: </span><span class="nx">test</span><span class="p">.</span><span class="nx">fullTitle</span><span class="p">()</span>
+      <span class="nv">duration: </span><span class="nx">test</span><span class="p">.</span><span class="nx">duration</span><span class="p">,</span>
+      <span class="nv">err: </span><span class="nx">test</span><span class="p">.</span><span class="nx">err</span>
+    <span class="p">}</span>
+  <span class="nv">tester = </span><span class="k">new</span> <span class="nx">mocha</span><span class="p">()</span>
+  <span class="k">for</span> <span class="nx">v</span> <span class="k">in</span> <span class="nx">data</span><span class="p">.</span><span class="nx">mocha</span><span class="p">.</span><span class="nx">files</span>
+    <span class="nx">tester</span><span class="p">.</span><span class="nx">addFile</span><span class="p">(</span><span class="nx">v</span><span class="p">)</span>
+  <span class="nx">tester</span><span class="p">.</span><span class="nx">loadFiles</span><span class="p">()</span>
+  <span class="nv">indents = </span><span class="mi">0</span>
+  <span class="nv">runner = </span><span class="nx">tester</span><span class="p">.</span><span class="nx">run</span><span class="p">((</span><span class="nx">err</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nv">obj = </span><span class="p">{</span>
+      <span class="nv">tests: </span><span class="nx">_</span><span class="p">(</span><span class="nx">tests</span><span class="p">).</span><span class="nx">map</span><span class="p">(</span><span class="nx">clean</span><span class="p">)</span>
+      <span class="nv">failures: </span><span class="nx">_</span><span class="p">(</span><span class="nx">failures</span><span class="p">).</span><span class="nx">map</span><span class="p">(</span><span class="nx">clean</span><span class="p">)</span>
+      <span class="nv">passes: </span><span class="nx">_</span><span class="p">(</span><span class="nx">passes</span><span class="p">).</span><span class="nx">map</span><span class="p">(</span><span class="nx">clean</span><span class="p">)</span>
+    <span class="p">}</span>
+    <span class="nx">process</span><span class="p">.</span><span class="nx">send</span><span class="p">({</span><span class="nv">result: </span><span class="nx">obj</span><span class="p">,</span> <span class="nv">file: </span><span class="nx">file</span><span class="p">,</span> <span class="nv">err: </span><span class="kc">false</span><span class="p">,</span> <span class="nv">suites: </span><span class="nx">suites</span><span class="p">})</span>
+  <span class="p">)</span>
+  <span class="nx">runner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;suite&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">suite</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nx">snumber</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="nx">indents</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="nv">suite.indents = </span><span class="nx">indents</span>
+    <span class="nx">suites</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="nx">indents</span><span class="o">:</span><span class="nx">indents</span><span class="p">,</span><span class="nx">title</span><span class="o">:</span><span class="nx">suite</span><span class="p">.</span><span class="nx">title</span><span class="p">,</span><span class="nx">index</span><span class="o">:</span><span class="nx">snumber</span><span class="p">})</span>
+  <span class="p">)</span>
+  <span class="nx">runner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;suite end&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">suite</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nx">indents</span> <span class="o">-=</span> <span class="mi">1</span>
+  <span class="p">)</span>
+  <span class="nx">runner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;test end&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">test</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nv">test.snumber = </span><span class="nx">snumber</span>
+    <span class="nx">tests</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">test</span><span class="p">)</span>
+  <span class="p">)</span>
+
+  <span class="nx">runner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;pass&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">test</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nv">test.snumber = </span><span class="nx">snumber</span>
+    <span class="nx">passes</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">test</span><span class="p">)</span>
+  <span class="p">)</span>
+
+  <span class="nx">runner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;fail&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">test</span><span class="p">)</span><span class="o">=&gt;</span>
+    <span class="nv">test.snumber = </span><span class="nx">snumber</span>
+    <span class="nx">failures</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">test</span><span class="p">)</span>
+
+  <span class="p">)</span>
+
+  <span class="nx">runnner</span><span class="p">.</span><span class="kc">on</span><span class="p">(</span><span class="s">&#39;end&#39;</span><span class="p">,</span> <span class="p">(</span><span class="nx">err</span><span class="p">,</span><span class="nx">stats</span><span class="p">)</span><span class="o">=&gt;</span>
+
+  <span class="p">)</span>
+<span class="p">)</span>
+
+</pre></div>             </td>           </tr>                </tbody>     </table>   </div> </body> </html> 
