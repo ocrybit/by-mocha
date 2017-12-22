@@ -46,7 +46,7 @@ See the [annotated source](docs/by-mocha.html) for details.
 Running Tests
 -------------
 
-Run tests with [mocha](http://visionmedia.github.com/mocha/)
+Run tests with [mocha](http://mochajs.org/)
 
     make
 	
